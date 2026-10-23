@@ -1,0 +1,10 @@
+# QuantLab Student 运行依赖（Python 3.10+）
+streamlit>=1.60
+pandas>=2.2.3
+numpy>=2.0
+plotly>=5.20
+requests>=2.31
+pytest>=8.0
+
+# 可选：在线行情数据源（未安装时可用示例数据 / CSV 导入）
+yfinance>=0.2.40

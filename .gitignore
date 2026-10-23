@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# 数据与本地状态（不入库）
+data/quantlab.db
+data/raw/
+data/clean/
+data/exports/
+data/*.log
+
+# 密钥与本地配置（绝不提交真实密钥）
+.env
+*.key
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+tmpwebapp*.log
