@@ -23,3 +23,7 @@ data/*.log
 Thumbs.db
 tmpwebapp*.log
 .video_agent/
+
+# 阶段2运行时产物：ML模型文件与回测明细（不入库）
+data/models/
+data/backtests/

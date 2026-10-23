@@ -10,9 +10,11 @@ RAW_DIR = DATA_DIR / "raw"        # 原始数据（只读，永不修改）
 CLEAN_DIR = DATA_DIR / "clean"    # 清洗后数据（与原始数据分开保存）
 EXPORT_DIR = DATA_DIR / "exports" # 导出的分析结果
 DB_PATH = DATA_DIR / "quantlab.db"
+MODELS_DIR = DATA_DIR / "models"      # 机器学习模型文件（不进 SQLite，库中只存引用）
+BACKTESTS_DIR = DATA_DIR / "backtests"  # 回测明细文件（trades/daily CSV）
 
 # 确保目录存在
-for d in (DATA_DIR, RAW_DIR, CLEAN_DIR, EXPORT_DIR):
+for d in (DATA_DIR, RAW_DIR, CLEAN_DIR, EXPORT_DIR, MODELS_DIR, BACKTESTS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 APP_NAME = "QuantLab Student"

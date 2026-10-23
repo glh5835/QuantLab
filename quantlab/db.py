@@ -50,6 +50,54 @@ CREATE TABLE IF NOT EXISTS tasks (
     finished_at TEXT DEFAULT '',
     created_at TEXT NOT NULL
 );
+
+-- 阶段2：机器学习实验存档（模型与预测文件存磁盘，库中只存路径引用与元数据）
+CREATE TABLE IF NOT EXISTS experiments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    dataset_id INTEGER NOT NULL,
+    dataset_name TEXT DEFAULT '',
+    dataset_version INTEGER DEFAULT 1,
+    task TEXT NOT NULL,                 -- direction（分类）/ return（回归）
+    horizon INTEGER NOT NULL,           -- 预测期限（未来 h 期）
+    label_rule TEXT DEFAULT '',         -- 标签定义说明（含零收益规则）
+    features_json TEXT DEFAULT '[]',    -- 特征列表
+    model_type TEXT NOT NULL,
+    model_params TEXT DEFAULT '{}',
+    seed INTEGER DEFAULT 42,
+    split_ratios TEXT DEFAULT '[0.7,0.15,0.15]',
+    train_range TEXT DEFAULT '', val_range TEXT DEFAULT '', test_range TEXT DEFAULT '',
+    train_n INTEGER DEFAULT 0, val_n INTEGER DEFAULT 0, test_n INTEGER DEFAULT 0,
+    purged_n INTEGER DEFAULT 0,         -- 因标签区间重叠被隔离（purge）的样本数
+    metrics_json TEXT DEFAULT '{}',     -- train/val/test 三段指标
+    model_path TEXT DEFAULT '',
+    predictions_path TEXT DEFAULT '',
+    status TEXT DEFAULT 'success',      -- success / failed
+    error TEXT DEFAULT '',
+    code_version TEXT DEFAULT ''
+);
+
+-- 阶段2：回测存档（交易明细与逐日状态存磁盘 CSV，库中只存路径与摘要）
+CREATE TABLE IF NOT EXISTS backtests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    strategy_type TEXT NOT NULL,        -- buy_hold / ma_cross / ml_signal
+    strategy_params TEXT DEFAULT '{}',
+    dataset_id INTEGER NOT NULL,
+    dataset_name TEXT DEFAULT '',
+    dataset_version INTEGER DEFAULT 1,
+    experiment_id INTEGER,              -- 仅 ml_signal 策略引用
+    start_date TEXT DEFAULT '', end_date TEXT DEFAULT '',
+    config_json TEXT DEFAULT '{}',      -- 初始资金/手续费/滑点/风控参数
+    metrics_json TEXT DEFAULT '{}',
+    trades_path TEXT DEFAULT '',
+    daily_path TEXT DEFAULT '',
+    status TEXT DEFAULT 'success',
+    error TEXT DEFAULT '',
+    code_version TEXT DEFAULT ''
+);
 """
 
 
@@ -196,3 +244,45 @@ def recover_stale_tasks() -> int:
             "UPDATE tasks SET status='failed', error='程序中断：任务未正常结束（可能因应用重启）。可点击重试。', "
             "finished_at=? WHERE status IN ('running','queued')", (now_str(),))
         return cur.rowcount
+
+
+# ---------------- 机器学习实验（阶段2） ----------------
+
+def get_experiment(exp_id: int):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM experiments WHERE id=?", (exp_id,)).fetchone()
+
+
+def list_experiments(limit: int = 50):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM experiments ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+# ---------------- 回测存档（阶段2） ----------------
+
+def save_backtest_record(**fields) -> int:
+    cols = ", ".join(fields.keys())
+    ph = ", ".join("?" for _ in fields)
+    with get_conn() as conn:
+        cur = conn.execute(f"INSERT INTO backtests ({cols}) VALUES ({ph})", tuple(fields.values()))
+        return cur.lastrowid
+
+
+def update_backtest(bt_id: int, **fields) -> None:
+    if not fields:
+        return
+    cols = ", ".join(f"{k}=?" for k in fields)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE backtests SET {cols} WHERE id=?", (*fields.values(), bt_id))
+
+
+def get_backtest(bt_id: int):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM backtests WHERE id=?", (bt_id,)).fetchone()
+
+
+def list_backtests(limit: int = 50):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM backtests ORDER BY id DESC LIMIT ?", (limit,)).fetchall()

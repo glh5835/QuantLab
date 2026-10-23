@@ -20,18 +20,17 @@ collect_tasks = [t for t in tasks if t["task_type"] == "collect"]
 last_collect = collect_tasks[0] if collect_tasks else None
 
 # ---------- 顶部指标卡 ----------
+n_experiments = len(db.list_experiments(limit=1000))
+n_backtests = len(db.list_backtests(limit=1000))
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("📚 数据集数量", len(datasets), help="已注册并保存了数据文件的数据集")
+c2.metric("🧪 实验数量", n_experiments, help="机器学习实验存档（阶段2起记录）")
+c3.metric("⚖️ 回测数量", n_backtests, help="策略回测存档（阶段2起记录）")
 if datasets:
     latest = max(d["updated_at"] for d in datasets)
-    c2.metric("🕒 数据最近更新", latest, help="最近一次采集/导入的时间")
+    c4.metric("🕒 数据最近更新", latest, help="最近一次采集/导入的时间")
 else:
-    c2.metric("🕒 数据最近更新", "—")
-c3.metric("🧪 任务总数", len(tasks), help="采集、清洗、分析等后台任务的累计记录数")
-if last_collect:
-    c4.metric("📡 最近采集", f"{last_collect['target']} · {status_label(last_collect['status'])}")
-else:
-    c4.metric("📡 最近采集", "—")
+    c4.metric("🕒 数据最近更新", "—")
 
 st.divider()
 
@@ -101,11 +100,19 @@ else:
 st.subheader("🧭 功能导航")
 n1, n2, n3, n4 = st.columns(4)
 n1.page_link("pages/1_📊_数据采集中心.py", label="📊 数据采集中心", icon="📡",
-             help="模块2：数据源配置、下载、增量更新、任务管理（本阶段已实现）")
+             help="模块2：数据源配置、下载、增量更新、任务管理（已验收）")
 n2.page_link("pages/2_🗂️_数据集管理.py", label="🗂️ 数据集管理", icon="🗃️",
-             help="模块3：质量检查、清洗、版本记录（本阶段已实现）")
+             help="模块3：质量检查、清洗、版本记录（已验收）")
 n3.page_link("pages/3_📈_自动分析.py", label="📈 自动分析", icon="🔬",
-             help="模块4：一键 EDA（本阶段已实现）")
-n4.markdown("🔧 机器学习实验室 / 策略回测 / 组合风险 / 报告中心\n\n📌 **未开始**（后续阶段实现，见 docs/开发路线.md）")
+             help="模块4：一键 EDA（已验收）")
+n4.page_link("pages/4_📐_技术指标.py", label="📐 技术指标", icon="📐",
+             help="阶段2-A：SMA/EMA/RSI/MACD/布林带统一指标中心")
+m1, m2, m3, m4 = st.columns(4)
+m1.page_link("pages/5_🤖_机器学习实验室.py", label="🤖 机器学习实验室", icon="🤖",
+             help="阶段2-B：时间序列三分防泄漏训练与实验存档")
+m2.page_link("pages/6_⚖️_策略回测.py", label="⚖️ 策略回测", icon="⚖️",
+             help="阶段2-C：买入持有/均线交叉/ML 信号回测（t+1 成交）")
+m3.markdown("🔧 投资组合与风险 / 模拟交易 / 报告中心\n\n📌 **未开始**（后续阶段）")
+m4.markdown("🧭 阶段2 演示路线：采集 → 质检清洗 → 技术指标 → ML 训练 → 回测对比")
 
 st.caption(f"{APP_NAME} v{APP_VERSION} · 本页所有指标来自本地 SQLite 真实记录 · 生成时间见任务表")
