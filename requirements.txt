@@ -1,10 +1,27 @@
-# QuantLab Student 运行依赖（Python 3.10+）
+# QuantLab Student — 全功能安装依赖（Python 3.10+，推荐 64-bit Python 3.11/3.12）
+# 本文件面向一次性安装完整功能和运行测试；升级后请在全新虚拟环境验证。
+
+# Web 界面 / 数据处理 / 可视化
 streamlit>=1.60
 pandas>=2.2.3
 numpy>=2.0
 plotly>=5.20
 requests>=2.31
-pytest>=8.0
 
-# 可选：在线行情数据源（未安装时可用示例数据 / CSV 导入）
+# 数据源与本地 Excel 导入
 yfinance>=0.2.40
+openpyxl>=3.1
+xlrd>=2.0.1
+
+# 阶段 2：机器学习和模型持久化
+scikit-learn>=1.5
+joblib>=1.3
+
+# 阶段 4：均值—方差优化 / PDF 图表与报告
+scipy>=1.13
+matplotlib>=3.8
+reportlab>=4.2
+
+# 测试和 PDF 内容校验
+pytest>=8.0
+pypdf>=5.0
