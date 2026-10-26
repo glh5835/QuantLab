@@ -24,8 +24,11 @@ n_experiments = len(db.list_experiments(limit=1000))
 n_backtests = len(db.list_backtests(limit=1000))
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("📚 数据集数量", len(datasets), help="已注册并保存了数据文件的数据集")
-c2.metric("🧪 实验数量", n_experiments, help="机器学习实验存档（阶段2起记录）")
-c3.metric("⚖️ 回测数量", n_backtests, help="策略回测存档（阶段2起记录）")
+c2.metric("🧪 ML 实验 / 回测", f"{n_experiments} / {n_backtests}",
+          help="机器学习实验与策略回测存档（阶段2起记录）")
+from quantlab.db import list_optimization_runs, list_walk_forward
+c3.metric("🎛️ 优化 / 滚动验证", f"{len(list_optimization_runs(1000))} / {len(list_walk_forward(1000))}",
+          help="参数优化与滚动样本外验证存档（阶段3起记录）")
 if datasets:
     latest = max(d["updated_at"] for d in datasets)
     c4.metric("🕒 数据最近更新", latest, help="最近一次采集/导入的时间")
@@ -112,7 +115,17 @@ m1.page_link("pages/5_🤖_机器学习实验室.py", label="🤖 机器学习�
              help="阶段2-B：时间序列三分防泄漏训练与实验存档")
 m2.page_link("pages/6_⚖️_策略回测.py", label="⚖️ 策略回测", icon="⚖️",
              help="阶段2-C：买入持有/均线交叉/ML 信号回测（t+1 成交）")
-m3.markdown("🔧 投资组合与风险 / 模拟交易 / 报告中心\n\n📌 **未开始**（后续阶段）")
-m4.markdown("🧭 阶段2 演示路线：采集 → 质检清洗 → 技术指标 → ML 训练 → 回测对比")
+m3.page_link("pages/7_📁_投资组合中心.py", label="📁 投资组合中心", icon="📁",
+             help="阶段3-A：多资产组合、权重配置与再平衡")
+m4.page_link("pages/8_🛡️_风险分析.py", label="🛡️ 风险分析", icon="🛡️",
+             help="阶段3-B：风险指标/回撤区间/分段/压力测试")
+p1, p2, p3, p4 = st.columns(4)
+p1.page_link("pages/9_🎛️_参数优化.py", label="🎛️ 参数优化", icon="🎛️",
+             help="阶段3-C：网格搜索与敏感性分析（验证段选参）")
+p2.page_link("pages/10_🔁_稳健性验证.py", label="🔁 稳健性验证", icon="🔁",
+             help="阶段3-D：滚动样本外验证与过拟合诊断")
+p3.page_link("pages/11_🆚_实验比较.py", label="🆚 实验比较", icon="🆚",
+             help="阶段3-E：多实验对比、条件检查与报告导出")
+p4.markdown("🔧 模拟交易 / 报告中心增强\n\n📌 **未开始**（后续阶段）")
 
 st.caption(f"{APP_NAME} v{APP_VERSION} · 本页所有指标来自本地 SQLite 真实记录 · 生成时间见任务表")

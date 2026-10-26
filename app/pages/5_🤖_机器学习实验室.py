@@ -160,4 +160,5 @@ hist = pd.DataFrame([{
 } for e in exps])
 st.dataframe(hist, use_container_width=True, hide_index=True)
 
-st.page_link("pages/6_⚖️_策略回测.py", label="→ 带着样本外信号去「⚖️ 策略回测」验证盈利能力", icon="⚖️")
+st.info("👉 下一步：到「⚖️ 策略回测」选择本实验的 **ML 信号策略**（默认只用 test 段样本外预测），"
+        "用真实手续费与滑点检验样本外盈利能力。")

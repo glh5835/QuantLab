@@ -67,32 +67,45 @@ class MACrossoverStrategy(BaseStrategy):
 class MLSignalStrategy(BaseStrategy):
     """策略 C：机器学习信号策略。
 
-    读取实验存档的预测文件（feature_time=t 的预测只用 ≤t 的特征 + 冻结模型，
-    在 t 收盘后可用）。默认只用 test 段（真正的样本外预测）生成交易信号。
+    两种构造方式：
+    1) experiment_id：读取实验存档的预测文件（feature_time=t 的预测只用 ≤t 的特征
+       + 冻结模型，在 t 收盘后可用）。默认只用 test 段（真正的样本外预测）。
+    2) predictions DataFrame（滚动验证用）：列 feature_time/y_pred，由每个滚动窗口
+       独立训练的模型直接生成，不经过全局存档。
     - direction 任务：预测涨（1）→ 目标仓位 1，否则 0。
     - return 任务：预测收益 > buy_threshold → 1；< exit_threshold → 0；
       介于两者之间 → 维持前一日状态（迟滞，减少频繁换手）。
     """
     name = "ml_signal"
 
-    def __init__(self, experiment_id: int, buy_threshold: float = 0.0,
-                 exit_threshold: float = 0.0, split: str = "test"):
-        exp = db.get_experiment(experiment_id)
-        if not exp:
-            raise StrategyError(f"实验 #{experiment_id} 不存在。")
-        if not exp["predictions_path"]:
-            raise StrategyError("该实验没有预测文件（训练失败或文件缺失），无法生成信号。")
-        self.experiment_id = experiment_id
-        self.task = exp["task"]
-        self.split = split
-        preds = pd.read_csv(exp["predictions_path"], parse_dates=["feature_time"])
-        preds = preds[preds["split"] == split].sort_values("feature_time")
+    def __init__(self, experiment_id: int = None, buy_threshold: float = 0.0,
+                 exit_threshold: float = 0.0, split: str = "test",
+                 predictions: "pd.DataFrame" = None, task: str = None):
+        if predictions is not None:
+            exp = None
+            preds = predictions.copy()
+            preds["feature_time"] = pd.to_datetime(preds["feature_time"])
+            preds = preds.sort_values("feature_time")
+            self.task = task
+            src_desc = "滚动窗口独立模型"
+        else:
+            exp = db.get_experiment(experiment_id)
+            if not exp:
+                raise StrategyError(f"实验 #{experiment_id} 不存在。")
+            if not exp["predictions_path"]:
+                raise StrategyError("该实验没有预测文件（训练失败或文件缺失），无法生成信号。")
+            self.task = exp["task"]
+            preds = pd.read_csv(exp["predictions_path"], parse_dates=["feature_time"])
+            preds = preds[preds["split"] == split].sort_values("feature_time")
+            src_desc = f"实验 #{experiment_id}（{split} 段样本外预测）"
         if len(preds) == 0:
-            raise StrategyError(f"实验 #{experiment_id} 在 {split} 段没有预测记录。")
+            raise StrategyError("没有可用的预测记录。")
+        self.experiment_id = experiment_id
+        self.split = split
         self._pred_by_time = dict(zip(preds["feature_time"], preds["y_pred"]))
         self._last_target = 0.0
         self.buy_th, self.exit_th = buy_threshold, exit_threshold
-        self.desc = (f"机器学习信号（实验 #{experiment_id}，{exp['task']} 任务，{split} 段样本外预测）："
+        self.desc = (f"机器学习信号（{src_desc}，{self.task} 任务）："
                      f"{'预测上涨→持有' if self.task == 'direction' else f'预测收益>{buy_threshold:.4f}→持有，<{exit_threshold:.4f}→退出'}"
                      f"；模型与阈值均已冻结，信号只在 t 收盘后可用。")
 

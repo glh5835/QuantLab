@@ -47,6 +47,7 @@ class BacktestConfig:
     min_cash_reserve: float = 0.0     # 最低现金保留比例（占总净值）
     drawdown_warn: float = 0.20       # 回撤预警阈值：超过只预警，不强制平仓
     stop_buy_on_drawdown: bool = False  # 预警触发后是否停止新买入（默认 False）
+    exec_delay: int = 1               # 信号延迟成交天数（1=次日开盘，阶段2 默认；压力测试用 2+）
 
     def validate(self):
         if self.initial_cash <= 0:
@@ -93,8 +94,8 @@ def _run_engine(df: pd.DataFrame, strategy, cfg: BacktestConfig) -> dict:
     dates = data.index
     for i, t in enumerate(dates):
         row = data.loc[t]
-        # ---------- 1) 开盘阶段：执行昨日信号 ----------
-        if pending is not None:
+        # ---------- 1) 开盘阶段：执行到期的信号订单（延迟 exec_delay 个交易日） ----------
+        if pending is not None and i >= pending["due_i"]:
             base = row.get("open")
             fill_mode = "open"
             if base is None or (isinstance(base, float) and math.isnan(base)) or base <= 0:
@@ -227,7 +228,8 @@ def _run_engine(df: pd.DataFrame, strategy, cfg: BacktestConfig) -> dict:
                 if target != last_target or (target > 0 and shares == 0):
                     reason = (f"目标仓位 {target:.0%}"
                               + ("（数据异常日，沿用此前目标）" if math.isnan(close) else ""))
-                    pending = {"signal_time": t, "target": target, "reason": reason}
+                    pending = {"signal_time": t, "due_i": i + max(int(cfg.exec_delay), 1),
+                               "target": target, "reason": reason}
                     last_target = target
 
     # ---------- 绩效指标 ----------

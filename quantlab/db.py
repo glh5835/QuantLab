@@ -98,6 +98,43 @@ CREATE TABLE IF NOT EXISTS backtests (
     error TEXT DEFAULT '',
     code_version TEXT DEFAULT ''
 );
+
+-- 阶段3：参数优化存档（网格搜索记录；test 段不参与选参的事实由字段固化）
+CREATE TABLE IF NOT EXISTS optimization_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    dataset_id INTEGER NOT NULL,
+    dataset_name TEXT DEFAULT '',
+    strategy_type TEXT NOT NULL,
+    param_grid_json TEXT DEFAULT '{}',
+    objective TEXT DEFAULT 'sharpe',
+    constraints_json TEXT DEFAULT '{}',
+    results_json TEXT DEFAULT '[]',     -- 每组参数的 val/train 指标
+    best_params_json TEXT DEFAULT '{}',
+    test_metrics_json TEXT DEFAULT '{}',
+    n_combinations INTEGER DEFAULT 0,
+    test_used_for_selection INTEGER DEFAULT 0,  -- 恒 0：test 从不参与选参
+    status TEXT DEFAULT 'success',
+    error TEXT DEFAULT '',
+    code_version TEXT DEFAULT ''
+);
+
+-- 阶段3：滚动验证存档（每窗口记录训练/测试区间与样本外指标）
+CREATE TABLE IF NOT EXISTS walk_forward_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    dataset_id INTEGER NOT NULL,
+    dataset_name TEXT DEFAULT '',
+    strategy_type TEXT NOT NULL,
+    mode TEXT DEFAULT 'rolling',        -- rolling(固定窗) / expanding(扩展窗)
+    config_json TEXT DEFAULT '{}',
+    windows_json TEXT DEFAULT '[]',     -- 每窗口 train/test 区间+指标+模型参数
+    summary_json TEXT DEFAULT '{}',     -- 样本外汇总统计与过拟合提示
+    n_windows INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'success',
+    error TEXT DEFAULT '',
+    code_version TEXT DEFAULT ''
+);
 """
 
 
@@ -286,3 +323,32 @@ def list_backtests(limit: int = 50):
     with get_conn() as conn:
         return conn.execute(
             "SELECT * FROM backtests ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+# ---------------- 参数优化 / 滚动验证存档（阶段3） ----------------
+
+def list_optimization_runs(limit: int = 50):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM optimization_runs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def get_optimization_run(run_id: int):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM optimization_runs WHERE id=?", (run_id,)).fetchone()
+
+
+def save_walk_forward(**fields) -> int:
+    cols = ", ".join(fields.keys())
+    ph = ", ".join("?" for _ in fields)
+    with get_conn() as conn:
+        cur = conn.execute(f"INSERT INTO walk_forward_runs ({cols}) VALUES ({ph})",
+                           tuple(fields.values()))
+        return cur.lastrowid
+
+
+def list_walk_forward(limit: int = 50):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM walk_forward_runs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
