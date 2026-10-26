@@ -1,28 +1,81 @@
 # QuantLab Student — 大学生量化研究与回测平台
 
-面向大学生的端到端量化研究工作流平台：数据采集 → 质量检查 → 数据清洗 → 探索性分析（后续阶段：特征工程 → 机器学习 → 策略回测 → 组合风险 → 报告导出）。
+面向大学生的端到端量化研究工作流平台：数据采集 → 质量检查 → 数据清洗 → 探索性分析 → 特征工程 → 机器学习 → 策略回测 → 组合风险 → 报告导出 → 模拟交易与任务调度。
 
 **当前进度：阶段 4 已完成（模拟交易 / 任务调度 / PDF 报告 / 均值-方差优化，181 个测试全过）。** 前序：阶段 3（组合/风险/优化/稳健性）、阶段 2（指标/ML/回测）、阶段 1（数据链路）。详见 `docs/` 下各阶段交付说明。
 
 ---
 
-## 一、快速启动
+## 一、安装依赖与启动
 
-```bash
-# 1. 安装依赖（仅首次）
-pip install -r requirements.txt
+### 1. 环境要求
 
-# 2. 启动应用
-python -m streamlit run app/Home.py
+- **Python 3.10 或更高版本**（推荐使用 64 位 Python 3.11 或 3.12；其他版本及操作系统尚需自行验证）。
+- Windows 10/11、macOS 或 Linux；需要 pip 和可创建虚拟环境的 Python。
+- 安装第三方依赖时需要能连接 Python 包镜像；**使用内置演示数据/本地 CSV 不需要 Yahoo 网络或 API Key**。
+- 全功能所需依赖集中在根目录 `requirements.txt`，其中包括机器学习、组合优化、Excel 导入、PDF 导出及测试工具。依赖采用最低版本约束，不是经过锁定的可复现环境文件。
+
+### 2. Windows（PowerShell，推荐）
+
+在终端中执行以下命令（可以复制运行，**不需要激活虚拟环境**）：
+
+```powershell
+git clone https://github.com/glh5835/QuantLab.git
+cd QuantLab
+
+# 若未安装 Git，可从 GitHub 下载 ZIP 解压，再在解压目录打开终端。
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# 检查依赖冲突并运行测试
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m pytest tests/ -q
+
+# 启动 Streamlit
+.\.venv\Scripts\python.exe -m streamlit run app/Home.py
 ```
 
-或直接**双击 `启动QuantLab.bat`**。浏览器打开 http://localhost:8501 即可使用。
+若机器上没有 Python 3.11，可以安装该版本，或将 `py -3.11` 改为本机实际可用的 `py -3.12` / `py -3.10`；先执行 `py -0p` 查看 Windows 已安装版本。项目首页一般由浏览器打开 `http://localhost:8501`（端口被占用时以终端实际输出为准）。
 
-运行自动化测试：
+**双击 `启动QuantLab.bat` 的注意事项：**该批处理使用 PATH 中的 `python`，**不会自动安装依赖，也不会自动选用 `.venv`**。按上面的命令用虚拟环境启动最可靠；如果想通过批处理启动，应确保 PATH/当前已激活环境对应安装了依赖的 Python。
+
+### 3. macOS / Linux
 
 ```bash
-python -m pytest tests/ -q    # 阶段1共 30 个测试，应全部通过
+git clone https://github.com/glh5835/QuantLab.git
+cd QuantLab
+
+python3 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip
+./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m pip check
+./.venv/bin/python -m pytest tests/ -q
+./.venv/bin/python -m streamlit run app/Home.py
 ```
+
+安装完成后浏览器打开终端提示的本地地址；若 `python3` 不是兼容版本，请改用 `python3.11` 或 `python3.12` 创建虚拟环境。
+
+### 4. 依赖对应功能
+
+| 功能 | 关键依赖 | 说明 |
+|---|---|---|
+| Web 页面、数据处理、图表 | `streamlit`、`pandas`、`numpy`、`plotly` | 首页及全部工作台 |
+| Yahoo 在线行情 | `yfinance`、`requests` | 网络不可用时仍可导入 CSV 或使用模拟数据 |
+| Excel 数据导入 | `openpyxl`、`xlrd` | `.xlsx/.xlsm` 使用 openpyxl；旧 `.xls` 使用 xlrd |
+| 机器学习实验 | `scikit-learn`、`joblib` | 特征预处理、模型训练与实验模型保存 |
+| 均值—方差优化 | `scipy`（及 `scikit-learn`） | SLSQP 求解、可选 Ledoit-Wolf 协方差收缩 |
+| PDF 研究报告 | `reportlab`、`matplotlib` | 报告生成、图表绘制；中文字体由模块按可用性回退 |
+| 自动化测试 | `pytest`、`pypdf` | 包括 PDF 内容读取验证；非应用运行必需 |
+
+### 5. 常见安装问题与验证口径
+
+- **`No module named ...`**：检查启动应用和安装依赖是否使用同一个 `.venv` Python；不要混用全局 `pip` 与虚拟环境。
+- **`pip` 安装失败或依赖冲突**：确认 Python 版本、网络及系统架构，使用 `python -m pip check` 检查已安装依赖；可删除失败的 `.venv` 后重新创建，**不要删除项目数据目录**。
+- **Yahoo 行情采集失败**：不等于项目未安装成功；可使用演示数据或 CSV 导入。在线采集需单独确认网络可达。
+- **Excel 无法读取**：检查文件实际格式，`.xlsx/.xlsm` 需 `openpyxl`，`.xls` 需 `xlrd`；仓库中的旧 `.xls` 自动化用例因缺少合法测试样本会跳过，不能视为格式已完整实测。
+- **PDF 中文字体失败**：模块优先项目授权字体或系统字体，再使用内置 CID 字体；全部不可用时会拒绝生成并提示替代导出。
+- **验收依据**：阶段 4 交付文档记录过 `181 passed`，**但安装教程更新本身不代表已经在全新环境复测**；请以本机 `pytest` 实际输出为准。
 
 ## 二、5 分钟演示路线（新手必读）
 
@@ -83,7 +136,7 @@ app/                       Streamlit 界面层（不含核心计算逻辑）
     ├── 12_💼_模拟交易.py     阶段4-A：虚拟账户与模拟交易
     └── 13_⏰_任务调度.py     阶段4-B：任务调度中心
 
-tests/                     pytest 测试（30 个，含已知数值断言）
+tests/                     pytest 测试（阶段 4 交付记录：181 个通过）
 data/                      运行时数据（不入 Git）
 ├── raw/                   原始数据（只读）
 ├── clean/                 清洗后数据
@@ -108,8 +161,7 @@ docs/                      阶段交付文档
 - yfinance 免费接口存在限流，且部分网络环境无法访问 Yahoo（此时用示例数据/CSV 导入）。
 - Streamlit `use_container_width` 参数有弃用警告（2025-12 后需改 `width='stretch'`），不影响功能。
 - 指数/停牌复权等深水区问题本阶段仅做检测提示，深入处理留到后续阶段。
-- 尚未初始化 Git 仓库提交（首次交付，建议用户确认后执行 `git init && git add . && git commit`）。
 
-## 六、下一步（阶段 2）
+## 六、后续改进方向
 
-特征工程 → 机器学习实验室（时间序列划分、防泄漏）→ 均线交叉策略 → 自研回测引擎（手续费/持仓核对）→ 绩效指标与基准对比。见 `docs/阶段1_交付说明.md` 末尾。
+阶段 1—4 的功能与验收记录详见 `docs/`。后续可考虑完善模拟订单类型与部分成交、调度失败自动重试、集中化报告模板及高级统计检验；这些功能不应被误认为当前已实现。
