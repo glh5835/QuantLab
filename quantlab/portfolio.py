@@ -149,19 +149,26 @@ def _align_prices(price_map: dict[str, pd.DataFrame], start, end) -> pd.DataFram
 
 
 def run_portfolio(price_map: dict[str, pd.DataFrame], weights: dict[str, float] | str,
-                  cfg: PortfolioConfig, start=None, end=None) -> dict:
+                  cfg: PortfolioConfig, start=None, end=None,
+                  mvo_options: dict = None) -> dict:
     """执行多资产组合回测。
 
-    weights: 显式权重字典（none/user 方法），或 "inverse_vol"（每次再平衡用 ≤t 数据重算）。
-    price_map: {资产名: 单资产 OHLCV}（含回测区间前的历史，供逆波动率回看，均为过去数据）。
+    weights 三种形式：
+    - 显式权重字典（equal/user 方法）
+    - "inverse_vol"：每次再平衡用 ≤t 历史重算逆波动率权重
+    - "mvo"：每次再平衡用 ≤t 历史滚动重估均值—方差权重（阶段 4D）。
+      mvo_options: {"objective","target_return","risk_aversion","window","max_weight",
+                    "shrinkage"}（详见 quantlab.mvo）。
+    price_map: {资产名: 单资产 OHLCV}（含回测区间前的历史，供估计窗口回看，均为过去数据）。
     返回：metrics / trades / rebalances / weights_history / daily / warnings。
     """
     cfg.validate()
     if not price_map or len(price_map) == 0:
         raise PortfolioError("至少需要一个资产。")
     assets = list(price_map.keys())
-    if isinstance(weights, str) and weights != "inverse_vol":
-        raise PortfolioError("权重方法必须是权重字典或 'inverse_vol'。")
+    if isinstance(weights, str) and weights not in ("inverse_vol", "mvo"):
+        raise PortfolioError("权重方法必须是权重字典、'inverse_vol' 或 'mvo'。")
+    mvo_state = {"options": dict(mvo_options or {}), "cache": {}} if weights == "mvo" else None
     fixed_weights = None if isinstance(weights, str) else normalize_weights(weights, cfg.max_weight)
     if fixed_weights is not None and set(fixed_weights) != set(assets):
         raise PortfolioError("权重字典的资产必须与资产列表一致。")
@@ -287,13 +294,27 @@ def run_portfolio(price_map: dict[str, pd.DataFrame], weights: dict[str, float] 
         if i + 1 < len(dates) and _is_rebalance_day(prev_t, t, cfg.rebalance):
             if fixed_weights is not None:
                 tw, warn = dict(fixed_weights), None
-            else:
+            elif weights == "inverse_vol":
                 hist = closes.loc[:t]
                 tw, warn = inverse_vol_weights(hist, cfg.vol_window, cfg.max_weight)
+            else:  # mvo：每次再平衡滚动重估（≤t 数据），权重在执行前计算完成
+                from .mvo import mvo_weights_at, MVOConfig
+                opts = mvo_state["options"]
+                mcfg = MVOConfig(window=int(opts.get("window", 120)),
+                                 max_weight=float(opts.get("max_weight", 0.6)),
+                                 shrinkage=opts.get("shrinkage", "none"))
+                hist = closes.loc[:t]
+                tw, warn = mvo_weights_at(hist, mcfg,
+                                          objective=opts.get("objective", "min_variance"),
+                                          target_return=opts.get("target_return"),
+                                          risk_aversion=float(opts.get("risk_aversion", 2.0)),
+                                          max_weight_cap=cfg.max_weight)
             if warn:
                 warnings.append(f"{t.date()} {warn}")
             weights_history.append({"signal_time": str(t.date()), "weights": tw,
-                                    "method": "fixed" if fixed_weights is not None else "inverse_vol"})
+                                    "method": ("fixed" if fixed_weights is not None
+                                               else ("inverse_vol" if weights == "inverse_vol"
+                                                     else "mvo"))})
             pending = {"signal_time": t, "target_weights": tw,
                        "reason": f"{'期初建仓' if i == 0 else cfg.rebalance + ' 再平衡'}（t 收盘决策，t+1 开盘成交）"}
 

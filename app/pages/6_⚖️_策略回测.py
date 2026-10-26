@@ -97,7 +97,9 @@ if st.button("🚀 运行回测", type="primary", use_container_width=True):
 
 # ---------------- 结果展示 ----------------
 res = st.session_state.get("last_bt")
-bts = db.list_backtests()
+# 最近存档回退：只取策略回测（组合存档属于投资组合中心，数据结构不同）
+bts = [b for b in db.list_backtests() if b["status"] == "success"
+       and b["strategy_type"] != "portfolio"]
 if res is None and bts:
     st.info(f"显示最近一次存档回测 #{bts[0]['id']}。")
     rec = bts[0]
@@ -196,3 +198,25 @@ if bts:
         "状态": b["status"], "创建": b["created_at"],
     } for b in bts])
     st.dataframe(hist, use_container_width=True, hide_index=True)
+
+# ---------------- PDF 导出（阶段4C） ----------------
+pc1, pc2 = st.columns(2)
+with pc1:
+    if st.button("📄 导出本回测 PDF 报告") and res.get("bt_id"):
+        try:
+            from quantlab.pdf_report import pdf_backtest_report, PDFFontError, PDFBuildError
+            p = pdf_backtest_report(res["bt_id"])
+            st.success(f"已生成：`{p.name}`")
+            with open(p, "rb") as f:
+                st.download_button("⬇️ 下载 PDF", f.read(), file_name=p.name,
+                                   mime="application/pdf")
+        except PDFFontError as e:
+            st.error(f"PDF 中文字体不可用，已拒绝生成（{e}）。请改用 HTML/CSV 导出。")
+        except PDFBuildError as e:
+            st.error(str(e))
+with pc2:
+    if st.button("📄 导出 HTML 报告") and res.get("bt_id"):
+        from quantlab.reports import backtest_report
+        _, p = backtest_report(res["bt_id"])
+        with open(p, "rb") as f:
+            st.download_button("⬇️ 下载 HTML", f.read(), file_name=p.name, mime="text/html")

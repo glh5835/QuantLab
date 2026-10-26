@@ -16,38 +16,57 @@ _cancel_flags: dict[int, threading.Event] = {}
 
 
 def cancel_task(task_id: int) -> bool:
-    """请求取消任务。任务函数内部会在关键点检查标志并退出。"""
+    """请求取消任务：置 cancel_requested（合法转换 queued→cancelled 或 running→cancel_requested）。
+
+    任务函数在检查点看到取消标志后退出，worker 收尾时把 cancel_requested 落定为
+    cancelled；请求取消后任务若仍跑完，则如实记录 succeeded（取消未生效）。
+    """
     if task_id in _running:
         _cancel_flags[task_id].set()
-        db.update_task(task_id, status="cancelled", message="已请求取消",
-                       finished_at=db.now_str())
+        try:
+            db.transition_task(task_id, "cancel_requested", message="已请求取消，等待任务响应")
+        except ValueError:
+            pass  # 已在收尾瞬间：标志已置位，最终状态由 worker 落定
         return True
-    db.update_task(task_id, status="cancelled", message="任务已不在运行（可能已结束）",
-                   finished_at=db.now_str())
-    return False
+    # 不在本进程运行：queued 可撤，终态不动
+    try:
+        db.transition_task(task_id, "cancelled", message="任务已不在运行（可能已结束）",
+                           finished_at=db.now_str())
+    except ValueError:
+        return False
+    return True
 
 
 def run_in_background(task_id: int, func, *args, **kwargs) -> None:
     """在守护线程中执行 func(task_id, cancel_event, *args)。
 
     约定：func 第一个参数是 task_id（用于写日志/进度），第二个是取消标志 Event。
+    状态机：queued→running→（succeeded|failed|cancelled）；取消请求后任务若
+    仍正常返回，则按 cancelled 收尾（标志已置位）或 succeeded（未响应取消），
+    均如实记录。
     """
     cancel = threading.Event()
     _cancel_flags[task_id] = cancel
 
     def _worker():
         _running[task_id] = threading.current_thread()
-        db.update_task(task_id, status="running", started_at=db.now_str(), progress=0)
+        db.transition_task(task_id, "running", started_at=db.now_str(), progress=0)
         try:
             func(task_id, cancel, *args, **kwargs)
-            final = db.get_task(task_id)
-            if final and final["status"] not in ("cancelled", "failed"):
-                db.update_task(task_id, status="success", progress=1.0,
-                               message="任务完成", finished_at=db.now_str())
+            final = db.get_task_safe(task_id)
+            if final and final["status"] == "cancel_requested":
+                db.transition_task(task_id, "cancelled", progress=final["progress"],
+                                   message="任务已响应取消请求", finished_at=db.now_str())
+            elif final and final["status"] == "running":
+                db.transition_task(task_id, "succeeded", progress=1.0,
+                                   message="任务完成", finished_at=db.now_str())
         except Exception as e:  # noqa: BLE001 - 任务系统必须捕获所有异常并入库
-            db.update_task(task_id, status="failed",
-                           error=f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}",
-                           finished_at=db.now_str())
+            try:
+                db.transition_task(task_id, "failed",
+                                   error=f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}",
+                                   finished_at=db.now_str())
+            except ValueError:
+                pass  # 已是 cancelled 等终态：异常发生在取消收尾之后，保留终态
             db.append_task_log(task_id, f"[失败] {type(e).__name__}: {e}")
         finally:
             _running.pop(task_id, None)

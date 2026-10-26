@@ -68,24 +68,28 @@ with tab_demo:
             st.success(f"任务 #{task_id} 已创建。")
             st.rerun()
 
-# ---------------- CSV 导入 ----------------
+# ---------------- 文件导入（CSV / Excel） ----------------
 with tab_csv:
-    st.markdown("上传本地行情 CSV（支持中文列：日期/开盘/最高/最低/收盘/成交量，或英文 date/open/high/low/close/volume）。"
-                "导入的数据会注册为数据集，来源标记为 `csv_import`。")
-    up = st.file_uploader("选择 CSV 文件", type=["csv"])
+    st.markdown("上传本地行情文件（**CSV / Excel .xlsx / .xls**）。"
+                "支持中文列（日期/开盘/最高/最低/收盘/成交量）或英文列"
+                "（date/open/high/low/close/volume）。导入后注册为数据集，来源标记 `csv_import`。")
+    up = st.file_uploader("选择文件", type=["csv", "xlsx", "xlsm", "xls"])
     if up is not None and st.button("📥 导入并注册数据集"):
         try:
-            tmp = pd.read_csv(up)  # 先读出内容（上传对象只能读一次）
-            csv_name = up.name.rsplit(".", 1)[0]
             import tempfile, os
-            with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8", newline="") as f:
-                tmp.to_csv(f, index=False)
+            from quantlab.datasources.csv_adapter import import_file
+            suffix = os.path.splitext(up.name)[1].lower()
+            with tempfile.NamedTemporaryFile("wb", suffix=suffix, delete=False) as f:
+                f.write(up.getvalue())
                 tmp_path = f.name
-            df = CsvImportAdapter().import_csv(tmp_path)
-            os.unlink(tmp_path)
+            try:
+                df = import_file(tmp_path)
+            finally:
+                os.unlink(tmp_path)
+            csv_name = up.name.rsplit(".", 1)[0]
             ds_id = db.register_dataset(f"{csv_name}_daily", csv_name, source="csv_import",
                                         asset_type="other", is_synthetic=0,
-                                        license_note="用户本地导入文件，来源由用户负责。",
+                                        license_note="用户本地导入文件（CSV/Excel），来源由用户负责。",
                                         field_desc=CsvImportAdapter.field_desc)
             path = save_raw(df, f"{csv_name}_daily")
             db.update_dataset(ds_id, raw_path=path,

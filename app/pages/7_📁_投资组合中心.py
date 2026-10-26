@@ -31,15 +31,58 @@ sel_ds = [names[k] for k in picked]
 for d in sel_ds:
     synthetic_badge(d)
 
-method = st.radio("权重方法", ["等权重", "自定义权重", "逆波动率（每次再平衡用当时历史重算）"],
-                  horizontal=True)
+method = st.radio("权重方法", ["等权重", "自定义权重", "逆波动率（每次再平衡用当时历史重算）",
+                              "均值-方差优化（滚动重估，阶段4）"], horizontal=True)
 weights = None
+mvo_options = None
 if method == "自定义权重":
     cols = st.columns(len(sel_ds))
     w = {}
     for c, d in zip(cols, sel_ds):
         w[d["name"]] = float(c.number_input(d["name"], 0.0, 100.0, 100.0 / len(sel_ds), 1.0))
     weights = w
+elif method.startswith("均值-方差"):
+    from quantlab.mvo import MVOConfig, MVOError, solve_mvo, estimate_inputs, efficient_frontier
+    m1, m2, m3, m4 = st.columns(4)
+    mvo_obj = m1.selectbox("优化目标", ["min_variance：最小方差",
+                                        "max_utility：均值-方差效用",
+                                        "target_return：目标收益"]).split("：")[0]
+    mvo_window = int(m2.number_input("估计窗口(日)", 60, 500, 120, 10))
+    mvo_cap = float(m3.number_input("单资产权重上限", 0.1, 1.0, 0.6, 0.05))
+    mvo_ra = float(m4.number_input("风险厌恶 λ(效用用)", 0.1, 20.0, 2.0, 0.1))
+    mvo_tgt = None
+    if mvo_obj == "target_return":
+        mvo_tgt = float(st.number_input("目标年化收益", -0.5, 1.0, 0.10, 0.01))
+    shrink = st.selectbox("协方差估计", ["none：样本协方差", "ledoit_wolf：Ledoit-Wolf 收缩"]).split("：")[0]
+    mvo_options = {"objective": mvo_obj, "window": mvo_window, "max_weight": mvo_cap,
+                   "risk_aversion": mvo_ra, "target_return": mvo_tgt, "shrinkage": shrink}
+    # 用当前数据末端做一次预览（仅展示；回测中每次再平衡会滚动重估）
+    try:
+        closes = pd.DataFrame({d["name"]: load_csv(
+            d["clean_path"] if d["cleaned"] else d["raw_path"])["close"] for d in sel_ds}).dropna()
+        cfg_prev = MVOConfig(window=mvo_window, max_weight=mvo_cap, shrinkage=shrink)
+        inputs = estimate_inputs(closes, cfg_prev)
+        prev = solve_mvo(inputs, mvo_obj, target_return=mvo_tgt, risk_aversion=mvo_ra, cfg=cfg_prev)
+        st.info(f"按最新 {inputs['n_days']} 日估计的当前权重预览：" +
+                "，".join(f"{k} {v:.1%}" for k, v in prev["weights"].items() if v > 0.001) +
+                f"（预期年化 {prev['port_return']:.2%}，波动 {prev['port_vol']:.2%}，"
+                f"耗时 {prev['elapsed_ms']:.0f}ms，{prev['method']}）")
+        st.caption("⚠️ 预览仅用当前数据末端；实际回测中每个再平衡日只用当时可得历史滚动重估"
+                   "（防未来数据），不排除预览权重与历史执行权重不同。")
+        with st.expander("有效前沿预览"):
+            try:
+                ef = efficient_frontier(inputs, cfg_prev)
+                import plotly.graph_objects as _go
+                fig = _go.Figure(_go.Scatter(x=ef["port_vol"], y=ef["port_return"],
+                                             mode="lines+markers"))
+                fig.update_layout(height=280, xaxis_title="年化波动", yaxis_title="年化收益",
+                                  yaxis_tickformat=".0%", xaxis_tickformat=".0%",
+                                  margin=dict(l=10, r=10, t=20, b=10))
+                st.plotly_chart(fig, use_container_width=True)
+            except MVOError as e:
+                st.warning(f"前沿计算：{e}")
+    except MVOError as e:
+        st.warning(f"当前数据无法预览优化权重：{e}（回测窗口不足时将回退等权并记录警告）")
 
 c1, c2, c3, c4 = st.columns(4)
 rebalance = c1.selectbox("再平衡频率", ["none（仅期初建仓）", "monthly", "quarterly"]).split("（")[0]
@@ -60,10 +103,10 @@ if st.button("🚀 运行组合回测", type="primary", use_container_width=True
                               slippage=slippage, rebalance=rebalance,
                               cash_reserve=cash_reserve, max_weight=max_weight)
         w_arg = "inverse_vol" if method.startswith("逆波动率") else \
-            (weights if weights else "equal")
+            ("mvo" if method.startswith("均值-方差") else (weights if weights else "equal"))
         if w_arg == "equal":
             w_arg = PF.equal_weights([d["name"] for d in sel_ds], max_weight)
-        res = PF.run_portfolio(price_map, w_arg, cfg)
+        res = PF.run_portfolio(price_map, w_arg, cfg, mvo_options=mvo_options)
         bt_id = PF.save_portfolio_run(f"组合·{'+'.join(d['name'] for d in sel_ds[:3])}",
                                       {d["name"]: d["id"] for d in sel_ds},
                                       method, cfg, res,

@@ -162,3 +162,16 @@ st.dataframe(hist, use_container_width=True, hide_index=True)
 
 st.info("👉 下一步：到「⚖️ 策略回测」选择本实验的 **ML 信号策略**（默认只用 test 段样本外预测），"
         "用真实手续费与滑点检验样本外盈利能力。")
+
+c_pdf, _ = st.columns([1, 2])
+with c_pdf:
+    if st.button("📄 导出本实验 PDF 报告"):
+        try:
+            from quantlab.pdf_report import pdf_ml_report, PDFFontError
+            p = pdf_ml_report(exp["id"])
+            st.success(f"已生成：`{p.name}`")
+            with open(p, "rb") as f:
+                st.download_button("⬇️ 下载 PDF", f.read(), file_name=p.name,
+                                   mime="application/pdf")
+        except PDFFontError as e:
+            st.error(f"PDF 中文字体不可用，已拒绝生成（{e}）。")

@@ -40,5 +40,8 @@ def empty_state(message: str, hint: str = ""):
 
 
 def status_label(status: str) -> str:
-    return {"queued": "⏳ 排队中", "running": "🔄 运行中", "success": "✅ 成功",
-            "failed": "❌ 失败", "cancelled": "🚫 已取消"}.get(status, status)
+    from quantlab.db import normalize_status
+    s = normalize_status(status)
+    return {"queued": "⏳ 排队中", "running": "🔄 运行中", "cancel_requested": "🛎️ 取消请求中",
+            "succeeded": "✅ 成功", "failed": "❌ 失败", "cancelled": "🚫 已取消",
+            "skipped": "⏭️ 已跳过", "missed": "⏰ 已错过"}.get(s, s)

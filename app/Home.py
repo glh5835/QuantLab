@@ -12,6 +12,17 @@ from quantlab.config import APP_NAME, APP_VERSION
 
 init_page("🏠 统一工作台", "项目总览 · 数据状态 · 最近任务 · 快速开始")
 
+
+# ---------------- 调度器生命周期（cache_resource 单例：页面刷新/切换不重启） ----------------
+@st.cache_resource(show_spinner=False)
+def _ensure_scheduler():
+    from quantlab import scheduler as SCH
+    thread, owner = SCH.get_scheduler()
+    return {"owner": owner, "started_at": db.now_str()}
+
+
+_sched_info = _ensure_scheduler()
+
 # ---------- 恢复中断任务后统计 ----------
 datasets = db.list_datasets()
 tasks = db.list_tasks(limit=50)
@@ -26,14 +37,17 @@ c1, c2, c3, c4 = st.columns(4)
 c1.metric("📚 数据集数量", len(datasets), help="已注册并保存了数据文件的数据集")
 c2.metric("🧪 ML 实验 / 回测", f"{n_experiments} / {n_backtests}",
           help="机器学习实验与策略回测存档（阶段2起记录）")
-from quantlab.db import list_optimization_runs, list_walk_forward
+from quantlab.db import list_optimization_runs, list_walk_forward, list_schedules
 c3.metric("🎛️ 优化 / 滚动验证", f"{len(list_optimization_runs(1000))} / {len(list_walk_forward(1000))}",
           help="参数优化与滚动样本外验证存档（阶段3起记录）")
-if datasets:
-    latest = max(d["updated_at"] for d in datasets)
-    c4.metric("🕒 数据最近更新", latest, help="最近一次采集/导入的时间")
-else:
-    c4.metric("🕒 数据最近更新", "—")
+try:
+    from quantlab.paper_trading import list_accounts
+    n_acc = len(list_accounts())
+except Exception:  # noqa: BLE001
+    n_acc = 0
+n_sched_enabled = len(list_schedules("enabled"))
+c4.metric("💼 虚拟账户 / 活跃调度", f"{n_acc} / {n_sched_enabled}",
+          help="模拟交易账户数与启用中的调度数（阶段4起记录）")
 
 st.divider()
 
@@ -126,6 +140,13 @@ p2.page_link("pages/10_🔁_稳健性验证.py", label="🔁 稳健性验证", i
              help="阶段3-D：滚动样本外验证与过拟合诊断")
 p3.page_link("pages/11_🆚_实验比较.py", label="🆚 实验比较", icon="🆚",
              help="阶段3-E：多实验对比、条件检查与报告导出")
-p4.markdown("🔧 模拟交易 / 报告中心增强\n\n📌 **未开始**（后续阶段）")
+p4.page_link("pages/12_💼_模拟交易.py", label="💼 模拟交易", icon="💼",
+             help="阶段4-A：虚拟账户与模拟订单（仅虚拟资金）")
+q1, q2, q3, q4 = st.columns(4)
+q1.page_link("pages/13_⏰_任务调度.py", label="⏰ 任务调度", icon="⏰",
+             help="阶段4-B：定时任务调度与统一状态管理")
+q2.markdown("📄 PDF 报告：回测/ML/组合页内一键导出（阶段4-C）")
+q3.markdown("📊 均值-方差优化：「📁 投资组合中心」内（阶段4-D）")
+q4.markdown("🔌 真实交易接入\n\n🚫 **永不实现**（本项目定位）")
 
 st.caption(f"{APP_NAME} v{APP_VERSION} · 本页所有指标来自本地 SQLite 真实记录 · 生成时间见任务表")
