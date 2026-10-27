@@ -46,3 +46,22 @@ jobs:
 
       - name: Run full pytest suite
         run: python -m pytest tests/ -q
+
+      # Exercise the actual .bat from an isolated project virtual environment.
+      # Windows-only: Ubuntu still runs the normal Python test matrix above.
+      - name: Create clean Windows launcher virtualenv
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python -m venv .venv
+
+      - name: Install runtime dependencies in launcher virtualenv
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+          .\.venv\Scripts\python.exe -m pip check
+
+      - name: Smoke test Windows double-click launcher
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python tools/ci_smoke_launcher.py
