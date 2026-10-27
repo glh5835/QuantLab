@@ -146,10 +146,12 @@ def drawdown_analysis(equity: pd.Series) -> dict:
 # ---------------- 历史区间分析 ----------------
 
 def period_analysis(equity: pd.Series, freq: str = "Y") -> list[dict]:
-    """按年(Y)/季度(Q)切分：各区间的收益、年化波动、最大回撤、样本天数。"""
-    if freq not in ("Y", "YE", "Q"):
-        raise ValueError("freq 必须是 'Y' 或 'Q'")
-    groups = equity.groupby(pd.Grouper(freq=freq))
+    """按年(Y/YE)/季度(Q/QE)切分：各区间的收益、年化波动、最大回撤、样本天数。"""
+    if freq not in ("Y", "YE", "Q", "QE"):
+        raise ValueError("freq 必须是 'Y'/'YE' 或 'Q'/'QE'")
+    # Pandas 3.0 移除了 Y、Q 两个旧偏移别名；对外兼容旧参数。
+    pandas_freq = {"Y": "YE", "Q": "QE"}.get(freq, freq)
+    groups = equity.groupby(pd.Grouper(freq=pandas_freq))
     out = []
     for period, seg in groups:
         if len(seg) < 2:
