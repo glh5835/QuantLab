@@ -98,6 +98,20 @@ def test_period_analysis_yearly():
     assert all(p["n_days"] >= 2 for p in periods)
 
 
+def test_period_analysis_aliases():
+    # 旧接口和 Pandas 3.0 新偏移别名均应得到同样的分组结果。
+    idx = pd.bdate_range("2023-01-02", periods=520)
+    eq = pd.Series(np.linspace(100, 150, len(idx)), index=idx)
+    yearly_old = R.period_analysis(eq, freq="Y")
+    yearly_new = R.period_analysis(eq, freq="YE")
+    quarterly_old = R.period_analysis(eq, freq="Q")
+    quarterly_new = R.period_analysis(eq, freq="QE")
+    assert yearly_old == yearly_new
+    assert quarterly_old == quarterly_new
+    assert yearly_old and quarterly_old
+    assert all("Q" in item["period"] for item in quarterly_new)
+
+
 # ---------------- 压力测试 ----------------
 
 def _fake_runner(calls):
